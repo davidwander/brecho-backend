@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales     Sale[]
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales     Sale[]
+
+  @@index([name])
+  @@index([email])
+  @@index([phone])
+  @@index([createdAt])
+}
+
+model Product {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  quantity     Int
+  status       String        @default("available")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  costPrice    Float
+  profitMargin Float
+  reserved     Boolean       @default(false)
+  salePrice    Float
+  sold         Boolean       @default(false)
+  code         String?
+  type         String
+  sales        SaleProduct[]
+
+  @@index([status])
+  @@index([type])
+  @@index([code])
+  @@index([sold])
+  @@index([reserved])
+  @@index([createdAt])
+  @@index([name])
+}
+
+model Sale {
+  id          String        @id @default(uuid())
+  clientId    String
+  userId      String
+  total       Float
+  status      String        @default("pending")
+  paymentType String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  delivery    Delivery?
+  client      Client        @relation(fields: [clientId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
+  products    SaleProduct[]
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([paymentType])
+}
+
+model SaleProduct {
+  id        String  @id @default(uuid())
+  saleId    String
+  productId String
+  quantity  Int
+  price     Float
+  product   Product @relation(fields: [productId], references: [id])
+  sale      Sale    @relation(fields: [saleId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model Delivery {
+  id        String    @id @default(uuid())
+  saleId    String    @unique
+  status    String    @default("pending")
+  address   String
+  date      DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  sale      Sale      @relation(fields: [saleId], references: [id])
+
+  @@index([status])
+  @@index([date])
+  @@index([createdAt])
+}
