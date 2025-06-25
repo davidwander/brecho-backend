@@ -85,21 +85,26 @@ class AuthController {
     try {
       const { email, password } = request.body;
 
+      console.log('Tentativa de login para:', email);
+
       const user = await prisma.user.findUnique({
         where: { email }
       });
 
       if (!user) {
+        console.log('Usuário não encontrado:', email);
         return response.status(401).json({ error: 'Usuário não encontrado' });
       }
 
       const isValidPassword = await bcrypt.compare(password, user.password);
 
       if (!isValidPassword) {
+        console.log('Senha inválida para usuário:', email);
         return response.status(401).json({ error: 'Senha inválida' });
       }
 
       if (!process.env.JWT_SECRET) {
+        console.error('JWT_SECRET não configurado');
         return response.status(500).json({ error: 'Erro de configuração do servidor' });
       }
 
@@ -122,7 +127,7 @@ class AuthController {
         }
       });
 
-      return response.json({
+      const responseData = {
         user: {
           id: user.id,
           name: user.name,
@@ -130,7 +135,17 @@ class AuthController {
         },
         accessToken,
         refreshToken
-      });
+      };
+
+      console.log('Login bem-sucedido para:', email);
+      console.log('Resposta sendo enviada:', JSON.stringify(responseData));
+
+      // Configura os headers CORS
+      response.header('Access-Control-Allow-Origin', '*');
+      response.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+      response.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      return response.json(responseData);
     } catch (error) {
       console.error('Erro no login:', error);
       return response.status(500).json({ error: 'Erro interno do servidor' });
