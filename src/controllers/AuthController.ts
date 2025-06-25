@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { addDays } from 'date-fns';
 
 const prisma = new PrismaClient();
 
@@ -80,40 +81,45 @@ export class AuthController {
     }
   }
 
-  async authenticate(request: Request, response: Response) {
+  async login(request: Request, response: Response) {
     try {
       const { email, password } = request.body;
-
-      // Validação dos campos
-      if (!email || !password) {
-        return response.status(400).json({ 
-          error: 'Dados incompletos',
-          details: 'Email e senha são obrigatórios'
-        });
-      }
 
       const user = await prisma.user.findUnique({
         where: { email }
       });
 
       if (!user) {
-        return response.status(401).json({ 
-          error: 'Credenciais inválidas',
-          details: 'Email ou senha incorretos'
-        });
+        return response.status(401).json({ error: 'Usuário não encontrado' });
       }
 
-      const passwordMatches = await bcrypt.compare(password, user.password);
+      const isValidPassword = await bcrypt.compare(password, user.password);
 
-      if (!passwordMatches) {
-        return response.status(401).json({ 
-          error: 'Credenciais inválidas',
-          details: 'Email ou senha incorretos'
-        });
+      if (!isValidPassword) {
+        return response.status(401).json({ error: 'Senha inválida' });
       }
 
-      const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET as string, {
-        expiresIn: '1d'
+      if (!process.env.JWT_SECRET) {
+        return response.status(500).json({ error: 'Erro de configuração do servidor' });
+      }
+
+      // Gera o token de acesso (JWT)
+      const accessToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+        expiresIn: '1h' // Token expira em 1 hora
+      });
+
+      // Gera o refresh token
+      const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+        expiresIn: '7d' // Refresh token expira em 7 dias
+      });
+
+      // Salva o refresh token no banco
+      await prisma.refreshToken.create({
+        data: {
+          userId: user.id,
+          token: refreshToken,
+          expiresAt: addDays(new Date(), 7)
+        }
       });
 
       return response.json({
@@ -122,14 +128,101 @@ export class AuthController {
           name: user.name,
           email: user.email
         },
-        token
+        accessToken,
+        refreshToken
       });
-    } catch (error: any) {
-      console.error('Erro na autenticação:', error);
-      return response.status(500).json({ 
-        error: 'Erro ao autenticar usuário',
-        details: error.message || 'Erro interno no servidor'
+    } catch (error) {
+      console.error('Erro no login:', error);
+      return response.status(500).json({ error: 'Erro interno do servidor' });
+    }
+  }
+
+  async refreshToken(request: Request, response: Response) {
+    try {
+      const { refreshToken } = request.body;
+
+      if (!refreshToken) {
+        return response.status(400).json({ error: 'Refresh token não fornecido' });
+      }
+
+      if (!process.env.JWT_SECRET) {
+        return response.status(500).json({ error: 'Erro de configuração do servidor' });
+      }
+
+      // Busca o refresh token no banco
+      const storedToken = await prisma.refreshToken.findUnique({
+        where: { token: refreshToken }
       });
+
+      if (!storedToken) {
+        return response.status(401).json({ error: 'Refresh token inválido' });
+      }
+
+      // Verifica se o token expirou
+      if (new Date() > storedToken.expiresAt) {
+        // Remove o token expirado
+        await prisma.refreshToken.delete({
+          where: { id: storedToken.id }
+        });
+        return response.status(401).json({ error: 'Refresh token expirado' });
+      }
+
+      try {
+        // Verifica se o token é válido
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET) as { id: string };
+
+        // Gera novo access token
+        const newAccessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, {
+          expiresIn: '1h'
+        });
+
+        // Gera novo refresh token
+        const newRefreshToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, {
+          expiresIn: '7d'
+        });
+
+        // Remove o refresh token antigo
+        await prisma.refreshToken.delete({
+          where: { id: storedToken.id }
+        });
+
+        // Salva o novo refresh token
+        await prisma.refreshToken.create({
+          data: {
+            userId: decoded.id,
+            token: newRefreshToken,
+            expiresAt: addDays(new Date(), 7)
+          }
+        });
+
+        return response.json({
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken
+        });
+      } catch (error) {
+        return response.status(401).json({ error: 'Refresh token inválido' });
+      }
+    } catch (error) {
+      console.error('Erro ao renovar token:', error);
+      return response.status(500).json({ error: 'Erro interno do servidor' });
+    }
+  }
+
+  async logout(request: Request, response: Response) {
+    try {
+      const { refreshToken } = request.body;
+
+      if (refreshToken) {
+        // Remove o refresh token do banco
+        await prisma.refreshToken.deleteMany({
+          where: { token: refreshToken }
+        });
+      }
+
+      return response.status(204).send();
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      return response.status(500).json({ error: 'Erro interno do servidor' });
     }
   }
 
