@@ -6,8 +6,8 @@ import { addDays } from 'date-fns';
 
 const prisma = new PrismaClient();
 
-export class AuthController {
-  async register(request: Request, response: Response) {
+class AuthController {
+  static async register(request: Request, response: Response) {
     try {
       const { name, email, password } = request.body;
 
@@ -81,7 +81,7 @@ export class AuthController {
     }
   }
 
-  async login(request: Request, response: Response) {
+  static async login(request: Request, response: Response) {
     try {
       const { email, password } = request.body;
 
@@ -137,7 +137,7 @@ export class AuthController {
     }
   }
 
-  async refreshToken(request: Request, response: Response) {
+  static async refreshToken(request: Request, response: Response) {
     try {
       const { refreshToken } = request.body;
 
@@ -208,7 +208,7 @@ export class AuthController {
     }
   }
 
-  async logout(request: Request, response: Response) {
+  static async logout(request: Request, response: Response) {
     try {
       const { refreshToken } = request.body;
 
@@ -226,7 +226,7 @@ export class AuthController {
     }
   }
 
-  async validate(request: Request, response: Response) {
+  static async validate(request: Request, response: Response) {
     try {
       const authHeader = request.headers.authorization;
 
@@ -264,4 +264,6 @@ export class AuthController {
       return response.status(400).json({ error: 'Erro ao validar token' });
     }
   }
-} 
+}
+
+export default AuthController; 
