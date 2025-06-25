@@ -96,6 +96,13 @@ class AuthController {
         return response.status(401).json({ error: 'Usuário não encontrado' });
       }
 
+      console.log('Usuário encontrado:', {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.createdAt
+      });
+
       const isValidPassword = await bcrypt.compare(password, user.password);
 
       if (!isValidPassword) {
@@ -118,13 +125,26 @@ class AuthController {
         expiresIn: '7d' // Refresh token expira em 7 dias
       });
 
+      // Remove tokens antigos do usuário
+      console.log('Removendo tokens antigos do usuário:', user.id);
+      await prisma.refreshToken.deleteMany({
+        where: { userId: user.id }
+      });
+
       // Salva o refresh token no banco
-      await prisma.refreshToken.create({
+      console.log('Salvando novo refresh token para o usuário:', user.id);
+      const savedRefreshToken = await prisma.refreshToken.create({
         data: {
           userId: user.id,
           token: refreshToken,
           expiresAt: addDays(new Date(), 7)
         }
+      });
+
+      console.log('Refresh token salvo:', {
+        id: savedRefreshToken.id,
+        userId: savedRefreshToken.userId,
+        expiresAt: savedRefreshToken.expiresAt
       });
 
       const responseData = {
@@ -137,13 +157,12 @@ class AuthController {
         refreshToken
       };
 
-      console.log('Login bem-sucedido para:', email);
-      console.log('Resposta sendo enviada:', JSON.stringify(responseData));
-
-      // Configura os headers CORS
-      response.header('Access-Control-Allow-Origin', '*');
-      response.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
-      response.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      console.log('Login bem-sucedido para:', email, {
+        userId: user.id,
+        accessTokenLength: accessToken.length,
+        refreshTokenLength: refreshToken.length,
+        refreshTokenId: savedRefreshToken.id
+      });
 
       return response.json(responseData);
     } catch (error) {
@@ -243,40 +262,31 @@ class AuthController {
 
   static async validate(request: Request, response: Response) {
     try {
-      const authHeader = request.headers.authorization;
+      // O middleware de autenticação já validou o token
+      // Se chegou aqui, significa que o token é válido
+      const userId = request.user?.id;
 
-      if (!authHeader) {
-        return response.status(401).json({ error: 'Token não fornecido' });
-      }
-
-      const [, token] = authHeader.split(' ');
-
-      try {
-        // Verifica se o token é válido
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string };
-
-        // Verifica se o usuário ainda existe
-        const user = await prisma.user.findUnique({
-          where: { id: decoded.id }
-        });
-
-        if (!user) {
-          return response.status(401).json({ error: 'Usuário não encontrado' });
-        }
-
-        // Retorna os dados do usuário
-        return response.json({
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email
-          }
-        });
-      } catch (err) {
+      if (!userId) {
         return response.status(401).json({ error: 'Token inválido' });
       }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          email: true
+        }
+      });
+
+      if (!user) {
+        return response.status(401).json({ error: 'Usuário não encontrado' });
+      }
+
+      return response.json({ user });
     } catch (error) {
-      return response.status(400).json({ error: 'Erro ao validar token' });
+      console.error('Erro na validação do token:', error);
+      return response.status(500).json({ error: 'Erro ao validar token' });
     }
   }
 }
