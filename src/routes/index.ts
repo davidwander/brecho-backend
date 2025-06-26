@@ -8,6 +8,16 @@ import { authMiddleware } from '../middlewares/auth';
 
 const routes = Router();
 
+// Rota de health check (não requer autenticação)
+routes.get('/health', (_, res) => {
+  res.json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Rotas da API
 routes.use('/auth', authRoutes);
 
 // Rotas protegidas

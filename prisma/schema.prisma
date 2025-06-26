@@ -118,6 +118,8 @@ model RefreshToken {
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+  userAgent String?
+  ipAddress String?
   user      User     @relation(fields: [userId], references: [id])
 
   @@index([token])
