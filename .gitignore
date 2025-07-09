@@ -1,17 +1,6 @@
-<<<<<<< HEAD
+
 # Node modules
 node_modules/
-
 # Ambiente
-.env
+.env/
 
-
-=======
-# Node modules
-node_modules/
-
-# Ambiente
-.env
-
-
->>>>>>> d5d60e657148c95b36d00ccddf8d49356e2e9030
